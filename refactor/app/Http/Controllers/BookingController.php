@@ -2,11 +2,11 @@
 
 namespace DTApi\Http\Controllers;
 
-use DTApi\Models\Job;
 use DTApi\Http\Requests;
 use DTApi\Models\Distance;
-use Illuminate\Http\Request;
+use DTApi\Models\Job;
 use DTApi\Repository\BookingRepository;
+use Illuminate\Http\Request;
 
 /**
  * Class BookingController
@@ -35,17 +35,11 @@ class BookingController extends Controller
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
-            $response = $this->repository->getUsersJobs($user_id);
-
-        }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
+        if ($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
         {
-            $response = $this->repository->getAll($request);
+            return response($this->repository->getAll($request));
         }
-
-        return response($response);
+        return response($this->repository->getUsersJobs($request->get('user_id')));
     }
 
     /**
@@ -107,8 +101,8 @@ class BookingController extends Controller
      */
     public function getHistory(Request $request)
     {
+        // its better using Request validation or better approach is using route model biinding against user record
         if($user_id = $request->get('user_id')) {
-
             $response = $this->repository->getUsersJobsHistory($user_id, $request);
             return response($response);
         }
@@ -122,10 +116,9 @@ class BookingController extends Controller
      */
     public function acceptJob(Request $request)
     {
-        $data = $request->all();
         $user = $request->__authenticatedUser;
 
-        $response = $this->repository->acceptJob($data, $user);
+        $response = $this->repository->acceptJob($request->all(), $user);
 
         return response($response);
     }
@@ -262,14 +255,16 @@ class BookingController extends Controller
         return response($response);
     }
 
-    public function resendNotifications(Request $request)
+    /**
+     * ------- Instead of using find , Use route model binding
+     * @param Request $request
+     * @return mixed
+     */
+    public function resendNotifications(Request $request, Job $job)
     {
-        $data = $request->all();
-        $job = $this->repository->find($data['jobid']);
         $job_data = $this->repository->jobToData($job);
         $this->repository->sendNotificationTranslator($job, $job_data, '*');
-
-        return response(['success' => 'Push sent']);
+        return $this->genericResponse(true, 'Push sent');
     }
 
     /**
@@ -279,15 +274,15 @@ class BookingController extends Controller
      */
     public function resendSMSNotifications(Request $request)
     {
-        $data = $request->all();
-        $job = $this->repository->find($data['jobid']);
-        $job_data = $this->repository->jobToData($job);
+        $job = $this->repository->find($request->get('jobid')); // instead of using route model binding
+        // $job_data = $this->repository->jobToData($job); useless code
 
         try {
             $this->repository->sendSMSNotificationToTranslator($job);
-            return response(['success' => 'SMS sent']);
+            return $this->genericResponse(true, 'SMS sent');
         } catch (\Exception $e) {
-            return response(['success' => $e->getMessage()]);
+            // return response(['success' => $e->getMessage()]); // why success should be proper response  http error response
+            $this->genericResponse(false, $e->getMessage());
         }
     }
 
